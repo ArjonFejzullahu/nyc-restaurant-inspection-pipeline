@@ -1,0 +1,6 @@
+pandas
+requests
+pyarrow
+matplotlib
+seaborn
+python-dotenv

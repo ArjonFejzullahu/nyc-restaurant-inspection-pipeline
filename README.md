@@ -1,2 +1,5 @@
-# nyc-restaurant-inspection-pipeline
-Big Data pipeline for NYC DOHMH Restaurant Inspection Results dataset
+# NYC Restaurant Inspection Pipeline
+
+**Dataset:** DOHMH New York City Restaurant Inspection Results
+
+Implementation in progress.
