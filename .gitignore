@@ -1,0 +1,30 @@
+# Environment
+.env
+
+# Bronze — raw CSV
+data/bronze/*.csv
+
+# Silver — cleaned Parquet
+data/silver/**/*.parquet
+
+# Gold — analytical tables
+data/gold/**/*.parquet
+data/gold/**/*.csv
+data/gold/**/*.sqlite
+data/gold/**/*.db
+
+# Generated outputs (keep directory placeholders)
+outputs/**
+!outputs/**/
+!outputs/**/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+
+# macOS
+.DS_Store
