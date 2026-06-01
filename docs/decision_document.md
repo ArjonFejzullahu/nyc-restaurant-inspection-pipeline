@@ -24,6 +24,9 @@ DOHMH itself acknowledges the dataset contains illogical values from data entry 
 transfer errors.
 A single-stage load would push all of these problems directly into the analytical layer,
 making every query result unreliable.
+The Socrata API also returns 4 undocumented computed region columns
+(computed_region_*) not present in the official 27-column schema; these are
+dropped in the Silver stage.
 
 **Alternatives evaluated**
 - *Flat single-stage load*: download the CSV and load it directly into a relational database
@@ -72,9 +75,8 @@ the Gold build step.
 **Decision**
 Parquet. The Silver layer is filtered by date and borough on every Gold build run.
 The dataset has 27 columns; the dominant queries read 3 of them (`INSPECTION DATE`,
-`BORO`, `CUISINE DESCRIPTION`). Parquet's columnar layout combined with predicate
-pushdown reduces the effective column scan from ~150 MB to approximately ~17 MB
-(150 MB × 3/27), skipping the remaining 24 columns entirely.
+`BORO`, `CUISINE DESCRIPTION`). Parquet with predicate pushdown reduces the effective scan from ~150 MB to approximately
+16.5 MB (measured on the actual Silver output), skipping the remaining 24 columns entirely.
 
 **Cost and justification**
 Parquet is not human-readable and requires a compatible reader (pandas, PyArrow, Spark).
