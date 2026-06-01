@@ -8,6 +8,7 @@ and write profile reports under outputs/profile/.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,16 +21,24 @@ PROFILE_DIR = PROJECT_ROOT / "outputs" / "profile"
 SUMMARY_PATH = PROFILE_DIR / "profile_summary.txt"
 METRICS_CSV_PATH = PROFILE_DIR / "profile_metrics.csv"
 
-# Metric keys in report order (only row_count and column_count are computed for now).
 METRIC_DEFINITIONS: tuple[tuple[str, str], ...] = (
     ("row_count", "Total number of rows in the Bronze dataset"),
     ("column_count", "Total number of columns in the Bronze dataset"),
-    ("null_values", "Null counts per column"),
-    ("duplicate_rows", "Number of fully duplicate rows"),
-    ("distinct_cuisine_count", "Distinct values in cuisine_description"),
-    ("invalid_borough_values", "Borough values outside valid NYC codes"),
-    ("placeholder_inspection_dates", "Inspection dates that are placeholders"),
+    ("null_score_count", "Rows with null score"),
+    ("null_grade_count", "Rows with null grade"),
+    ("null_grade_date_count", "Rows with null grade_date"),
+    ("null_violation_code_count", "Rows with null violation_code"),
+    ("null_violation_description_count", "Rows with null violation_description"),
+    ("null_cuisine_description_count", "Rows with null cuisine_description"),
+    ("null_zipcode_count", "Rows with null zipcode"),
+    ("placeholder_inspection_date_count", "Rows with placeholder inspection_date (1900-01-01)"),
+    ("invalid_boro_zero_count", "Rows where boro is 0 (string or numeric)"),
+    ("distinct_cuisine_count", "Distinct non-null cuisine_description values"),
+    ("duplicate_row_count", "Fully duplicate rows (pandas duplicated())"),
 )
+
+PLACEHOLDER_INSPECTION_ISO = re.compile(r"^1900-01-01")
+PLACEHOLDER_INSPECTION_SLASH = re.compile(r"^0?1/0?1/1900")
 
 
 def setup_logging() -> None:
@@ -53,57 +62,70 @@ def load_bronze_dataset(path: Path = BRONZE_CSV) -> pd.DataFrame:
     return df
 
 
-def calculate_metrics(df: pd.DataFrame) -> dict[str, Any]:
-    """
-    Calculate profiling metrics for the Bronze dataset.
+def _null_count(series: pd.Series) -> int:
+    return int(series.isna().sum())
 
-    Only row_count and column_count are implemented; other keys are placeholders.
-    """
+
+def count_placeholder_inspection_dates(series: pd.Series) -> int:
+    """Count rows where inspection_date is 1900-01-01 or 1/1/1900 (string-safe)."""
+    as_string = series.astype(str).str.strip()
+    placeholder_mask = as_string.str.match(
+        PLACEHOLDER_INSPECTION_ISO, na=False
+    ) | as_string.str.match(PLACEHOLDER_INSPECTION_SLASH, na=False)
+    return int(placeholder_mask.sum())
+
+
+def count_invalid_boro_zero(series: pd.Series) -> int:
+    """Count rows where boro is the string '0' or numeric 0."""
+    as_string = series.astype(str).str.strip()
+    string_zero = as_string == "0"
+    numeric = pd.to_numeric(series, errors="coerce")
+    numeric_zero = numeric == 0
+    return int((string_zero | numeric_zero).sum())
+
+
+def calculate_metrics(df: pd.DataFrame) -> dict[str, Any]:
+    """Calculate profiling metrics for the Bronze dataset."""
     metrics: dict[str, Any] = {
         "row_count": len(df),
         "column_count": len(df.columns),
-        "null_values": None,
-        "duplicate_rows": None,
-        "distinct_cuisine_count": None,
-        "invalid_borough_values": None,
-        "placeholder_inspection_dates": None,
+        "null_score_count": _null_count(df["score"]),
+        "null_grade_count": _null_count(df["grade"]),
+        "null_grade_date_count": _null_count(df["grade_date"]),
+        "null_violation_code_count": _null_count(df["violation_code"]),
+        "null_violation_description_count": _null_count(df["violation_description"]),
+        "null_cuisine_description_count": _null_count(df["cuisine_description"]),
+        "null_zipcode_count": _null_count(df["zipcode"]),
+        "placeholder_inspection_date_count": count_placeholder_inspection_dates(
+            df["inspection_date"]
+        ),
+        "invalid_boro_zero_count": count_invalid_boro_zero(df["boro"]),
+        "distinct_cuisine_count": int(df["cuisine_description"].nunique(dropna=True)),
+        "duplicate_row_count": int(df.duplicated().sum()),
     }
 
-    logging.info("Computed row_count: %s", f"{metrics['row_count']:,}")
-    logging.info("Computed column_count: %s", metrics["column_count"])
-
-    pending = [name for name, value in metrics.items() if value is None]
-    if pending:
-        logging.info(
-            "Placeholder metrics (not yet implemented): %s",
-            ", ".join(pending),
-        )
+    for name, value in metrics.items():
+        logging.info("Computed %s: %s", name, f"{value:,}" if isinstance(value, int) else value)
 
     return metrics
 
 
-def _metric_status(value: Any) -> str:
-    return "computed" if value is not None else "pending"
-
-
 def _format_metric_value(value: Any) -> str:
-    if value is None:
-        return ""
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
 
 
 def build_metrics_dataframe(metrics: dict[str, Any]) -> pd.DataFrame:
-    """Build a tabular report of all metrics and their implementation status."""
+    """Build a tabular report of all metrics."""
     rows = []
     for metric_name, description in METRIC_DEFINITIONS:
-        value = metrics.get(metric_name)
+        value = metrics[metric_name]
         rows.append(
             {
                 "metric": metric_name,
                 "value": _format_metric_value(value),
-                "status": _metric_status(value),
+                "status": "computed",
                 "description": description,
             }
         )
@@ -118,19 +140,16 @@ def build_summary_text(metrics: dict[str, Any], source_path: Path) -> str:
         "=" * 60,
         f"Source: {source_path}",
         "",
-        "Implemented metrics",
-        "-" * 40,
-        f"row_count:    {metrics['row_count']:,}",
-        f"column_count: {metrics['column_count']}",
-        "",
-        "Planned metrics (not yet implemented)",
+        "Metrics",
         "-" * 40,
     ]
 
-    for metric_name, description in METRIC_DEFINITIONS:
-        if metrics.get(metric_name) is not None:
-            continue
-        lines.append(f"- {metric_name}: {description}")
+    for metric_name, _description in METRIC_DEFINITIONS:
+        value = metrics[metric_name]
+        if isinstance(value, int):
+            lines.append(f"{metric_name}: {value:,}")
+        else:
+            lines.append(f"{metric_name}: {value}")
 
     lines.extend(["", "End of summary"])
     return "\n".join(lines) + "\n"
