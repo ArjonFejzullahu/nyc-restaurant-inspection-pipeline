@@ -16,6 +16,6 @@ Build an end-to-end Big Data pipeline on the full NYC restaurant inspection data
 | **Silver** | Cleaned Parquet after validation, deduplication, typing, and missing-value handling |
 | **Gold** | Analytical fact and dimension tables for inspection analysis |
 
-Downstream steps profile raw data, expose CSV summaries and charts, and document architectural decisions.
+Downstream stages profile raw data, process and model inspection records, generate analytical outputs, and document architectural decisions.
 
 Implementation in progress.

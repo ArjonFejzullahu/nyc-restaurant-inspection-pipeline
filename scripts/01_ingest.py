@@ -26,6 +26,14 @@ DEFAULT_API_URL = (
 REQUEST_TIMEOUT_SECONDS = 120
 MAX_PAGE_ATTEMPTS = 4  # 1 initial request + 3 retries
 DEFAULT_PAGE_SIZE = 10000
+REQUIRED_COLUMNS = (
+    "camis",
+    "dba",
+    "boro",
+    "inspection_date",
+    "score",
+    "grade",
+)
 
 
 def setup_logging() -> None:
@@ -190,6 +198,33 @@ def download_all_records(api_url: str, page_size: int) -> list[dict]:
     return all_records
 
 
+def validate_bronze_dataframe(df: pd.DataFrame) -> None:
+    """Validate downloaded records before writing Bronze CSV."""
+    if df.empty:
+        raise ValueError("Bronze dataset is empty: no rows were downloaded")
+
+    row_count = len(df)
+    if row_count <= 0:
+        raise ValueError("Bronze dataset has no rows")
+
+    logging.info("Row count: %s", f"{row_count:,}")
+
+    column_count = len(df.columns)
+    if column_count <= 0:
+        raise ValueError("Bronze dataset has no columns")
+
+    logging.info("Column count: %s", column_count)
+
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(
+            "Bronze dataset is missing required columns: "
+            + ", ".join(missing)
+        )
+
+    logging.info("Bronze validation passed")
+
+
 def save_bronze_csv(df: pd.DataFrame) -> Path:
     BRONZE_DIR.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUTPUT_CSV, index=False)
@@ -230,6 +265,12 @@ def main() -> int:
 
     logging.info("Building pandas DataFrame from %s records", len(records))
     df = pd.DataFrame(records)
+
+    try:
+        validate_bronze_dataframe(df)
+    except ValueError as exc:
+        logging.error("Bronze validation failed: %s", exc)
+        return 1
 
     output_path = save_bronze_csv(df)
 
