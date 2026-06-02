@@ -4,3 +4,4 @@ pyarrow
 matplotlib
 seaborn
 python-dotenv
+azure-storage-blob
