@@ -34,10 +34,12 @@ Grain decisions
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SILVER_PARQUET = (
@@ -50,6 +52,13 @@ DIM_RESTAURANT_PATH = GOLD_DIR / "dim_restaurant.parquet"
 DIM_CUISINE_PATH = GOLD_DIR / "dim_cuisine.parquet"
 DIM_DATE_PATH = GOLD_DIR / "dim_date.parquet"
 
+GOLD_UPLOAD_SPECS: tuple[tuple[Path, str], ...] = (
+    (FACT_PATH, "fact_inspections.parquet"),
+    (DIM_RESTAURANT_PATH, "dim_restaurant.parquet"),
+    (DIM_CUISINE_PATH, "dim_cuisine.parquet"),
+    (DIM_DATE_PATH, "dim_date.parquet"),
+)
+
 # Columns that uniquely identify an inspection visit
 INSPECTION_KEYS = ["camis", "inspection_date", "inspection_type"]
 
@@ -60,6 +69,63 @@ def setup_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    for logger_name in (
+        "azure",
+        "azure.core.pipeline.policies.http_logging_policy",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+def load_config() -> tuple[str, str | None, str]:
+    env_path = PROJECT_ROOT / ".env"
+    if env_path.is_file():
+        load_dotenv(env_path)
+        logging.info("Loaded configuration from %s", env_path)
+    else:
+        logging.warning(
+            "No .env file at %s; using defaults and environment variables",
+            env_path,
+        )
+        load_dotenv()
+
+    pipeline_mode = os.getenv("PIPELINE_MODE", "local")
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    container_gold = os.getenv("AZURE_CONTAINER_GOLD", "gold")
+    return pipeline_mode, connection_string, container_gold
+
+
+def validate_azure_config(pipeline_mode: str, connection_string: str | None) -> None:
+    if pipeline_mode.lower() == "azure" and not (
+        connection_string and connection_string.strip()
+    ):
+        raise ValueError(
+            "PIPELINE_MODE=azure requires AZURE_STORAGE_CONNECTION_STRING to be set"
+        )
+
+
+def upload_gold_tables_to_azure(
+    connection_string: str,
+    container_name: str,
+    upload_specs: tuple[tuple[Path, str], ...] = GOLD_UPLOAD_SPECS,
+) -> None:
+    """Upload all local Gold Parquet files to Azure Blob Storage."""
+    from azure.storage.blob import BlobServiceClient
+
+    logging.info("Azure upload starting")
+    logging.info("Container: %s", container_name)
+
+    blob_service = BlobServiceClient.from_connection_string(connection_string)
+
+    for local_path, blob_name in upload_specs:
+        logging.info("Blob name: %s", blob_name)
+        blob_client = blob_service.get_blob_client(
+            container=container_name,
+            blob=blob_name,
+        )
+        with local_path.open("rb") as data:
+            blob_client.upload_blob(data, overwrite=True)
+
+    logging.info("Azure upload succeeded")
 
 
 # ── Load Silver ────────────────────────────────────────────────────────────
@@ -226,6 +292,15 @@ def main() -> int:
     logging.info("Starting Gold build")
 
     try:
+        pipeline_mode, connection_string, container_gold = load_config()
+        validate_azure_config(pipeline_mode, connection_string)
+    except ValueError as exc:
+        logging.error("Invalid configuration: %s", exc)
+        return 1
+
+    logging.info("PIPELINE_MODE=%s", pipeline_mode)
+
+    try:
         df = load_silver()
     except FileNotFoundError as exc:
         logging.error("%s", exc)
@@ -240,6 +315,17 @@ def main() -> int:
     write_table(dim_cuisine, DIM_CUISINE_PATH, "dim_cuisine")
     write_table(dim_date, DIM_DATE_PATH, "dim_date")
     write_table(fact, FACT_PATH, "fact_inspections")
+
+    if pipeline_mode.lower() == "azure":
+        assert connection_string is not None
+        try:
+            upload_gold_tables_to_azure(
+                connection_string.strip(),
+                container_gold,
+            )
+        except Exception as exc:
+            logging.error("Azure upload failed: %s", exc)
+            return 1
 
     print(f"dim_restaurant rows : {len(dim_restaurant):,}")
     print(f"dim_cuisine rows    : {len(dim_cuisine):,}")
