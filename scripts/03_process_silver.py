@@ -10,15 +10,15 @@ Cleaning rules applied
 1.  Computed region columns: drop the 4 Socrata-internal geometry columns
     (computed_region_*) that are not part of the official dataset schema.
 2.  Column names: strip whitespace, lowercase, replace spaces with underscores.
-2.  inspection_date: parse to datetime; rows where date is 1900-01-01 set to NaT.
-3.  grade_date / record_date: parse to datetime.
-4.  score: coerce to numeric (Int64); non-numeric values become NA.
-5.  boro: replace '0' and '0.0' with 'UNKNOWN'; strip and uppercase.
-6.  cuisine_description: strip whitespace; empty strings set to NA.
-7.  dba: strip whitespace; empty strings set to NA.
-8.  zipcode: coerce to string; strip; replace '0', 'N/A', '' with NA.
-9.  critical_flag: strip whitespace; standardise to title case.
-10. Deduplication: drop exact duplicate rows (all columns identical).
+3.  inspection_date: parse to datetime; rows where date is 1900-01-01 set to NaT.
+4.  grade_date / record_date: parse to datetime.
+5.  score: coerce to numeric (Int64); non-numeric values become NA.
+6.  boro: replace '0' and '0.0' with 'UNKNOWN'; strip and uppercase.
+7.  cuisine_description: strip whitespace; empty strings set to NA.
+8.  dba: strip whitespace; empty strings set to NA.
+9.  zipcode: coerce to string; strip; replace '0', 'N/A', '' with NA.
+10. critical_flag: strip whitespace; standardise to title case.
+11. Deduplication: drop exact duplicate rows (all columns identical).
 """
 
 from __future__ import annotations

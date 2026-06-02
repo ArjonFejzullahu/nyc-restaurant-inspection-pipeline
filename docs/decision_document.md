@@ -123,7 +123,3 @@ update frequency.
 map-style transformations (type casting, null filtering, deduplication) across all
 ~296,000 rows in a single bulk pass before writing output, consistent with the batch
 processing model covered in the course.
-
----
-
-_Document to be finalised after pipeline runs end-to-end on the full dataset._

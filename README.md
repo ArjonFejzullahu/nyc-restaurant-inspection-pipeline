@@ -29,16 +29,28 @@ This pipeline cleans, structures, and analyzes that data to answer:
 
 ---
 
-## Approved Architecture (Milestone 1)
+## Approved Architecture (Milestone 1) — Implemented in Milestone 2
 
-This implementation follows the architecture approved in Milestone 1.
+The pipeline was proposed for Azure (ADF + Blob Storage + Azure SQL) in Milestone 1.
+For Milestone 2 the full logic is implemented locally in Python using the same
+Medallion Architecture and identical transformation rules. The local implementation
+is functionally equivalent, fully reproducible without cloud credentials, and runs
+end-to-end in under 2 minutes on the full ~296,000-row dataset.
+
+**Why local for M2:** The M2 requirement is a reproducible prototype — a reviewer
+must be able to run the pipeline on a fresh machine without external dependencies.
+An Azure deployment requires an active subscription, resource group access, and
+credentials that cannot be shared. The local Python implementation satisfies the
+reproducibility requirement while preserving the same architectural decisions:
+Medallion layering, schema-on-read vs schema-on-write, batch processing, and data
+lineage all apply identically regardless of whether storage is local or cloud-based.
 
 ### Medallion Architecture
 
 | Layer | Storage | Role |
 |---|---|---|
 | **Bronze** | `data/bronze/` (local) / Azure Blob `bronze/` | Raw CSV exactly as downloaded from Socrata API — never modified |
-| **Silver** | `data/silver/` (local) / Azure Blob `silver/` | Cleaned Parquet: standardized columns, parsed dates, deduplication, null handling, normalized cuisine values |
+| **Silver** | `data/silver/` (local) / Azure Blob `silver/` | Cleaned Parquet: standardised columns, parsed dates, deduplication, null handling, normalised cuisine values |
 | **Gold** | `data/gold/` (local) / Azure Blob `gold/` | Analytical star schema: `fact_inspections`, `dim_restaurant`, `dim_cuisine`, `dim_date` |
 
 Downstream stages profile raw data, process and model inspection records, generate analytical outputs, and document architectural decisions.
@@ -64,6 +76,35 @@ Downstream stages profile raw data, process and model inspection records, genera
 
 ---
 
-## Setup and Reproduction
+## Reproduction
 
-_Full setup and run commands will be documented here as the pipeline is completed._
+### Prerequisites
+
+- Python 3.9 or higher
+- pip3
+
+### Install dependencies
+
+```bash
+pip3 install -r requirements.txt
+```
+
+### Run the full pipeline
+
+```bash
+python3 scripts/run_pipeline.py
+```
+
+This runs all five stages end-to-end: Ingest → Profile → Silver → Gold → Expose.
+Total runtime is approximately 2 minutes on the full ~296,000-row dataset.
+
+### Expected outputs
+
+| Type | Path |
+|---|---|
+| CSV table | `outputs/tables/borough_summary.csv` |
+| CSV table | `outputs/tables/cuisine_summary.csv` |
+| CSV table | `outputs/tables/worst_restaurants.csv` |
+| Chart | `outputs/charts/avg_score_by_borough.png` |
+| Chart | `outputs/charts/cuisine_risk.png` |
+| Chart | `outputs/charts/inspection_trend.png` |
