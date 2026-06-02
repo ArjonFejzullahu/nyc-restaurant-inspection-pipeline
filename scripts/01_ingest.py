@@ -43,6 +43,11 @@ def setup_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    for logger_name in (
+        "azure",
+        "azure.core.pipeline.policies.http_logging_policy",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 def load_config() -> tuple[str, str, int, str | None, str]:
