@@ -83,6 +83,16 @@ Downstream stages profile raw data, process and model inspection records, genera
 - Python 3.9 or higher
 - pip3
 
+### Setup configuration
+
+Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` as needed (for example, `PIPELINE_MODE=local` for local-only runs, or `PIPELINE_MODE=azure` with `AZURE_STORAGE_CONNECTION_STRING` for Blob uploads).
+
 ### Install dependencies
 
 ```bash

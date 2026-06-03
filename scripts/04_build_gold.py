@@ -82,9 +82,10 @@ def load_config() -> tuple[str, str | None, str]:
         load_dotenv(env_path)
         logging.info("Loaded configuration from %s", env_path)
     else:
-        logging.warning(
-            "No .env file at %s; using defaults and environment variables",
-            env_path,
+        logging.info(
+            "No .env file found. Using default local configuration. "
+            "The pipeline can run locally, but Azure features require a "
+            "configured .env file containing Azure connection settings.",
         )
         load_dotenv()
 
